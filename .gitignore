@@ -4,3 +4,20 @@
 **/.cache/
 **/*.tsbuildinfo
 test/scratch/
+
+# Review deliverables only; explicit ceilings are in artifacts/budget.md.
+!/.imd-responses.json
+!/artifacts/
+/artifacts/**
+!/artifacts/validation.md
+!/artifacts/budget.md
+!/artifacts/browser-checks.json
+!/artifacts/taste.json
+!/artifacts/design-guidance-notice.md
+!/artifacts/design-guidance-LICENSE.txt
+!/artifacts/screenshots/
+!/artifacts/screenshots/draft-390.png
+!/artifacts/screenshots/draft-1440.png
+!/artifacts/screenshots/rival-390.png
+!/artifacts/screenshots/overlay-lost.png
+!/artifacts/screenshots/help-focus.png

@@ -61,7 +61,7 @@ The shared `.site-header`, `.page-shell` and `.site-footer` align to a maximum 1
 
 The draft’s first screen is kept compact without clipping or hiding game information. Navigation uses `auto-fit` with a 4.25rem minimum, retaining four columns at normal supported sizes and allowing fewer columns when text is enlarged. Card metadata can wrap. A mobile **Five picked. Review your team** button scrolls to and focuses the team heading. The rest of the controls stay in document flow; there is no fixed mobile bar obscuring cards.
 
-Rendered reflow was checked at 320, 390, 580, 760, 960 and 1440px. The OBS layout is specifically 1920×1080. A separate 200% root-text check supplements reflow; native browser zoom and physical-device inspection are distinct, unperformed checks.
+Rendered draft reflow was checked at 320, 390, 580, 760, 960 and 1440px. Rival comparisons with 16-character unbroken names were checked in Chromium and WebKit at 320, 360, 390, 760 and 1440px. The head-to-head grids use `minmax(0, 1fr)`; invitation/heading/ranking names have `min-width: 0` and `overflow-wrap: anywhere`, and invitation text is bounded to its column. A comparison heading wraps while its score stays together; no name is clipped or abbreviated. The OBS layout is specifically 1920×1080. A separate 200% root-text check supplements reflow; native browser zoom and physical-device inspection are distinct, unperformed checks.
 
 ## Elevation & Depth
 
@@ -83,12 +83,14 @@ Event cards have 10px radii, reduced to 8px on phones. Card picture wells use 5p
 | `EventCard` | `src/components/EventCard.tsx` | Event, price, selection, Captain and outcome; optional pick/Captain handlers; compact overlay variant |
 | `.button` | `src/styles.css` | `primary` orange or `secondary` paper; minimum 48px height; loading/disabled states remain explicit |
 | `DraftBuilder` | `src/App.tsx` | Twelve-card market, three filter buttons, five slots, Captain and save validation; unpriced cards cannot be picked |
-| `Watches`, `LiveView` | `src/App.tsx` | Four UTC buckets, confirmed totals, active/rested/unsettled labels, live roster |
+| `Watches`, `LiveView` | `src/App.tsx` | Four UTC buckets, confirmed lower-bound totals, active/rested/unsettled and In progress labels, live roster |
 | `ResultReveal` | `src/App.tsx` | Five staged CSS flips; reveal-all alternative; final score, best, streak and sharing after reveal |
 | `ShareControl` | `src/App.tsx` | Clipboard action, copied status and selectable textarea fallback; X sharing is an explicit link |
 | `RivalsView`, `RosterComparison` | `src/App.tsx` | Imported roster, two comparable lists, add-rival state, local ranking and unverified-timing disclosure |
 | `HelpDialog` | `src/App.tsx` | Native modal focus containment, Escape support, close action and focus return to help trigger |
-| `Overlay` | `src/App.tsx` | Transparent lower third, five cards and hamster; no controls; portable hash roster |
+| `Overlay` | `src/App.tsx` | Transparent lower third, five cards and hamster; no controls; portable hash roster; feed-specific lost-signal times and last-known outcomes |
+
+The OBS hamster scene is 160px tall in normal operation and 140px during feed errors, allowing both error timestamps and the last-known caption to fit within the 1920×1080 lower third. The panel retains the existing paper/ink tokens, 13px caption, 20px title, 3px outline and 12px radius. Counter faults and stale wheel measurements have separate captions.
 
 Native buttons, links, labels, selects and dialog provide the keyboard model. Toggle buttons expose `aria-pressed`, navigation uses `aria-current`, and controls use visible text or explicit labels. Focus uses a 3px outline with 4px offset. Routine messages use stable polite status regions. Inputs, waiting states, storage errors and lost signal use plain explanatory copy.
 

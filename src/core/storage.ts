@@ -8,7 +8,8 @@ import {
   type Scored,
 } from "./game";
 import { dayKey, dayStart, validDay, WATCH_MS } from "./dates";
-import { numeric } from "./data";
+import { mergeDays, numeric } from "./data";
+import { encodeRival } from "./share";
 
 export const STORAGE_KEY = "fantasy-hamster:v1";
 export interface LocalState {
@@ -74,7 +75,12 @@ export function readState(storage: Pick<Storage, "getItem">): {
           !b ||
           b.start !== dayStart(day) + i * WATCH_MS ||
           b.end !== b.start + WATCH_MS ||
-          b.end > Date.now()
+          (b.complete === false
+            ? !Number.isFinite(b.observedAt) ||
+              b.observedAt < b.start ||
+              b.observedAt >= b.end ||
+              b.start > Date.now()
+            : b.end > Date.now())
         )
           return null;
         try {
@@ -84,6 +90,8 @@ export function readState(storage: Pick<Storage, "getItem">): {
             work: numeric(b.work),
             rounds: numeric(b.rounds),
             blocks: numeric(b.blocks),
+            ...(b.complete === false ? { complete: false } : {}),
+            ...(Number.isFinite(b.observedAt) ? { observedAt: b.observedAt } : {}),
           };
         } catch {
           return null;
@@ -126,25 +134,84 @@ export function readState(storage: Pick<Storage, "getItem">): {
     return { state: emptyState(), failed: true };
   }
 }
-export function writeState(
-  storage: Pick<Storage, "setItem">,
+/** Merge additions from other tabs; unchanged fields never replace newer stored values. */
+export function mergeState(
+  base: LocalState,
+  local: LocalState,
+  remote: LocalState,
+): LocalState {
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  const drafts = { ...remote.drafts };
+  for (const [day, draft] of Object.entries(local.drafts)) {
+    const other = drafts[day];
+    if (
+      !other || draft.savedAt > other.savedAt ||
+      (draft.savedAt === other.savedAt && JSON.stringify(draft) > JSON.stringify(other))
+    )
+      drafts[day] = draft;
+  }
+  const scores = { ...remote.scores };
+  for (const [day, score] of Object.entries(local.scores)) {
+    const other = scores[day];
+    const changedHere = !same(score, base.scores[day]);
+    const changedThere = !same(other, base.scores[day]);
+    if (
+      !other ||
+      (same(score.roster, drafts[day]) &&
+        (!same(other.roster, drafts[day]) || (changedHere && !changedThere)))
+    )
+      scores[day] = score;
+  }
+  const rivals = { ...remote.rivals };
+  for (const [day, rosters] of Object.entries(local.rivals)) {
+    const combined = new Map((rivals[day] ?? []).map((r) => [encodeRival(r), r]));
+    for (const r of rosters) combined.set(encodeRival(r), r);
+    rivals[day] = [...combined.values()].slice(0, 20);
+  }
+  return {
+    version: 1,
+    drafts,
+    days: mergeDays(remote.days, local.days),
+    scores,
+    rivals,
+    revealed: [...new Set([...remote.revealed, ...local.revealed])],
+    name: local.name !== base.name ? local.name : remote.name,
+  };
+}
+
+/** Read immediately before writing. An unreadable/newer blob is never replaced. */
+export function persistState(
+  storage: Pick<Storage, "getItem" | "setItem">,
   state: LocalState,
-): boolean {
+  base: LocalState = emptyState(),
+): { state: LocalState; failed: boolean } {
   try {
+    const latest = readState(storage);
+    if (latest.failed) return { state, failed: true };
+    const merged = mergeState(base, state, latest.state);
     // Daily evidence is compact; retain a year, plus every day required by a saved roster.
     const keepAfter = dayStart(dayKey()) - 366 * 86_400_000;
     const days = Object.fromEntries(
-      Object.entries(state.days).filter(
+      Object.entries(merged.days).filter(
         ([day]) =>
           dayStart(day) >= keepAfter ||
-          state.drafts[day] ||
-          state.scores[day] ||
-          !isComplete(state.days, day),
+          merged.drafts[day] ||
+          merged.scores[day] ||
+          !isComplete(merged.days, day),
       ),
     );
-    storage.setItem(STORAGE_KEY, JSON.stringify({ ...state, days }));
-    return true;
+    const saved = { ...merged, days };
+    // No redundant writes, including storage-event echoes in another tab.
+    if (storage.getItem(STORAGE_KEY) !== JSON.stringify(saved))
+      storage.setItem(STORAGE_KEY, JSON.stringify(saved));
+    return { state: saved, failed: false };
   } catch {
-    return false;
+    return { state, failed: true };
   }
+}
+export function writeState(
+  storage: Pick<Storage, "getItem" | "setItem">,
+  state: LocalState,
+): boolean {
+  return !persistState(storage, state).failed;
 }

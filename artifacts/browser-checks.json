@@ -1,0 +1,115 @@
+{
+  "checks": [
+    {
+      "name": "Chromium complete draft + keyboard help + persistence + share fallback + rival H2H",
+      "passed": true,
+      "detail": "5 picks, Captain, validation, reload, 2 ranked teams, zero axe violations"
+    },
+    {
+      "name": "Chromium result reveal + saved score + live roster",
+      "passed": true,
+      "detail": "5 staged flips; exact 20-point score; last watch unknown"
+    },
+    {
+      "name": "Chromium in-progress live evidence",
+      "passed": true,
+      "detail": "Positive Night watch counts hit Overtime, Clocked In and Triple Shift before midnight; unfinished watch stays labelled In progress"
+    },
+    {
+      "name": "Chromium long rival reflow",
+      "passed": true,
+      "detail": "All 16 characters, expired outcomes and numeric scores fit; 320/360/390/760/1440px"
+    },
+    {
+      "name": "Chromium tabs and overlay share storage safely",
+      "passed": true,
+      "detail": "B saves; A and OBS synchronize; visibility refetch and reload retain draft, archived score, rival and reveal; local edits survive name changes"
+    },
+    {
+      "name": "Chromium unreadable storage protection",
+      "passed": true,
+      "detail": "Malformed JSON and a future schema remain byte-identical after loading and editing"
+    },
+    {
+      "name": "Chromium overlay feed integrity",
+      "passed": true,
+      "detail": "Independent failures, first-load failures, last-good times, retained outcomes, distinct counter fault/stale labels, null anchor; no controls and fits lower third"
+    },
+    {
+      "name": "Responsive export at nested IPFS path",
+      "passed": true,
+      "detail": "320, 390, 580, 760, 960, 1440; no overflow or axe violations"
+    },
+    {
+      "name": "Text enlargement",
+      "passed": true,
+      "detail": "200% root text at 390px reflows without horizontal overflow; not native browser zoom"
+    },
+    {
+      "name": "OBS lower third",
+      "passed": true,
+      "detail": "1920\u00d71080; 5 live cards; transparent; no controls; within lower third"
+    },
+    {
+      "name": "Expired day",
+      "passed": true,
+      "detail": "An unsaved day outside the API window says Result expired"
+    },
+    {
+      "name": "API failure",
+      "passed": true,
+      "detail": "Signal lost; honest last-known time; confused hamster; no fabricated prices"
+    },
+    {
+      "name": "Blocked browser storage",
+      "passed": true,
+      "detail": "Explicit visit-only warning and usable draft"
+    },
+    {
+      "name": "Polling and backoff",
+      "passed": true,
+      "detail": "20s status; 5m settlements; Retry-After=120s honored; hidden tab pauses both; resume refreshes"
+    },
+    {
+      "name": "UTC midnight rollover",
+      "passed": true,
+      "detail": "New tomorrow pack replaces the now-locked draft"
+    },
+    {
+      "name": "WebKit complete draft + keyboard help + persistence + share fallback + rival H2H",
+      "passed": true,
+      "detail": "5 picks, Captain, validation, reload, 2 ranked teams, zero axe violations"
+    },
+    {
+      "name": "WebKit result reveal + saved score + live roster",
+      "passed": true,
+      "detail": "5 staged flips; exact 20-point score; last watch unknown"
+    },
+    {
+      "name": "WebKit in-progress live evidence",
+      "passed": true,
+      "detail": "Positive Night watch counts hit Overtime, Clocked In and Triple Shift before midnight; unfinished watch stays labelled In progress"
+    },
+    {
+      "name": "WebKit long rival reflow",
+      "passed": true,
+      "detail": "All 16 characters, expired outcomes and numeric scores fit; 320/360/390/760/1440px"
+    },
+    {
+      "name": "WebKit tabs and overlay share storage safely",
+      "passed": true,
+      "detail": "B saves; A and OBS synchronize; visibility refetch and reload retain draft, archived score, rival and reveal; local edits survive name changes"
+    },
+    {
+      "name": "WebKit unreadable storage protection",
+      "passed": true,
+      "detail": "Malformed JSON and a future schema remain byte-identical after loading and editing"
+    },
+    {
+      "name": "WebKit overlay feed integrity",
+      "passed": true,
+      "detail": "Independent failures, first-load failures, last-good times, retained outcomes, distinct counter fault/stale labels, null anchor; no controls and fits lower third"
+    }
+  ],
+  "limitation": "Emulation is not a physical-device or screen-reader test."
+}

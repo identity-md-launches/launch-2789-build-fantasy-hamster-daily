@@ -28,8 +28,10 @@ import {
 import { mergeDays, wheelState } from "./core/data";
 import {
   emptyState,
+  mergeState,
+  persistState,
   readState,
-  writeState,
+  STORAGE_KEY,
   type LocalState,
 } from "./core/storage";
 import { decodeRival, encodeRival, resultText } from "./core/share";
@@ -139,6 +141,13 @@ function DraftBuilder({
   );
   const [filter, setFilter] = useState("All cards");
   const [error, setError] = useState("");
+  useEffect(() => {
+    if (saved) {
+      setPicks(saved.picks);
+      setCaptain(saved.captain);
+      setError("");
+    }
+  }, [saved?.savedAt, saved?.captain, saved?.picks.join(",")]);
   const cards = useMemo(() => dailyCards(day), [day]);
   const freshPrices = useMemo(() => pricesFor(day, days), [day, days]);
   const unchanged =
@@ -411,7 +420,7 @@ function Watches({ day, days }: { day: string; days: Days }) {
       {bucketsFor(days, day).map((b, i) => (
         <div
           key={i}
-          className={`watch ${b ? (b.rounds > 0 ? "active-watch" : "rest-watch") : "unknown-watch"}`}
+          className={`watch ${b?.rounds ? "active-watch" : b && b.complete !== false ? "rest-watch" : "unknown-watch"}`}
         >
           <span className="watch-symbol">
             <Icon name={b?.rounds ? "wheel" : "sun"} size={18} />
@@ -422,11 +431,9 @@ function Watches({ day, days }: { day: string; days: Days }) {
             {String((i + 1) * 6).padStart(2, "0")} UTC
           </span>
           <span className="small">
-            {b
-              ? b.rounds > 0
-                ? `${number(b.work)} work`
-                : "Rested"
-              : "Not settled"}
+            {b?.complete === false
+              ? `${number(b.work)} work · In progress`
+              : b ? b.rounds > 0 ? `${number(b.work)} work` : "Rested" : "Not settled"}
           </span>
         </div>
       ))}
@@ -484,8 +491,8 @@ function LiveView({
       </div>
       <Watches day={today} days={days} />
       <p className="muted small">
-        Only finished six-hour watches count. An unsettled watch is unknown,
-        even when the API reports zero.
+        Work in progress can confirm a hit. Only finished watches can confirm
+        rest; an unsettled zero is unknown.
       </p>
       {draft ? (
         <>
@@ -1047,6 +1054,8 @@ function Overlay({
   rpm,
   incoming,
   windowStart,
+  statusFeed,
+  resultsFeed,
 }: {
   days: Days;
   local: LocalState;
@@ -1055,6 +1064,8 @@ function Overlay({
   rpm: number;
   incoming: Roster | null;
   windowStart?: number;
+  statusFeed: { error: string | null; lastGood: number | null; loading: boolean; data: { coreStatus: string } | null };
+  resultsFeed: { error: string | null; lastGood: number | null };
 }) {
   const today = dayKey(now);
   const draft =
@@ -1069,27 +1080,34 @@ function Overlay({
     !isComplete(days, draft.day) &&
     windowStart !== undefined &&
     dayStart(addDays(draft.day, 1)) <= windowStart;
+  const lost = !!(statusFeed.error || resultsFeed.error);
+  const received = (time: number | null) => time ? utcTime(time) : "never on this visit";
+  const caption = lost
+    ? `Signal lost · ${[
+        resultsFeed.error ? `results last received ${received(resultsFeed.lastGood)}` : "",
+        statusFeed.error ? `status last received ${received(statusFeed.lastGood)}` : "",
+      ].filter(Boolean).join(" · ")}`
+    : statusFeed.data?.coreStatus === "COUNTER_FAULT"
+      ? "Counter fault"
+      : state === "confused"
+        ? statusFeed.loading ? "Connecting to wheel" : "Wheel measurement stale"
+        : expired ? "Result expired"
+          : draft && draft.day > today ? "Tomorrow’s team"
+            : state === "running" ? "On the wheel" : "Resting up";
   useEffect(() => {
     document.documentElement.classList.add("overlay-mode");
     return () => document.documentElement.classList.remove("overlay-mode");
   }, []);
   return (
     <main className="obs-overlay" aria-label="Fantasy Hamster stream overlay">
-      <div className="overlay-hamster">
+      <div className={`overlay-hamster ${lost ? "signal-lost" : ""}`}>
         <Hamster state={state} rpmMilli={rpm} />
         <strong>Fantasy Hamster</strong>
         <span className="small">
           Game #{dayNumber(draft?.day ?? today)} ·{" "}
-          {expired
-            ? "Result expired"
-            : draft && draft.day > today
-              ? "Tomorrow’s team"
-              : state === "running"
-                ? "On the wheel"
-                : state === "sleeping"
-                  ? "Resting up"
-                  : "Signal lost"}
+          {caption}
         </span>
+        {resultsFeed.error && <span className="small">Card outcomes are last-known.</span>}
       </div>
       <div className="overlay-cards">
         {draft ? (
@@ -1195,6 +1213,7 @@ export default function App() {
     }
   });
   const [local, setLocal] = useState<LocalState>(loaded.state);
+  const persisted = useRef(loaded.state);
   const [storageFailed, setStorageFailed] = useState(loaded.failed);
   const [view, setView] = useState<View>(getView);
   const [hash, setHash] = useState(location.hash);
@@ -1247,12 +1266,50 @@ export default function App() {
     });
   }, [settlements.data]);
   useEffect(() => {
-    try {
-      if (!writeState(localStorage, local)) setStorageFailed(true);
-    } catch {
-      setStorageFailed(true);
-    }
+    let cancelled = false;
+    const save = () => {
+      if (cancelled) return;
+      try {
+        const result = persistState(localStorage, local, persisted.current);
+        setStorageFailed(result.failed);
+        if (result.failed) return;
+        persisted.current = result.state;
+        setLocal((current) => {
+          const merged = mergeState(local, current, result.state);
+          return JSON.stringify(merged) === JSON.stringify(current) ? current : merged;
+        });
+      } catch {
+        setStorageFailed(true);
+      }
+    };
+    // Serialize simultaneous saves on browsers supporting Web Locks. The
+    // fallback still re-reads and merges the latest state before every write.
+    if (navigator.locks) void navigator.locks.request(STORAGE_KEY, save).catch(() => setStorageFailed(true));
+    else save();
+    return () => { cancelled = true; };
   }, [local]);
+  useEffect(() => {
+    const sync = () => {
+      try {
+        const result = readState(localStorage);
+        if (result.failed) { setStorageFailed(true); return; }
+        setLocal((current) => {
+          const merged = mergeState(persisted.current, current, result.state);
+          return JSON.stringify(merged) === JSON.stringify(current) ? current : merged;
+        });
+      } catch { setStorageFailed(true); }
+    };
+    const storage = (event: StorageEvent) => {
+      if (event.key === STORAGE_KEY) sync();
+    };
+    const visible = () => { if (!document.hidden) sync(); };
+    addEventListener("storage", storage);
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      removeEventListener("storage", storage);
+      document.removeEventListener("visibilitychange", visible);
+    };
+  }, []);
   useEffect(() => {
     const dialog = helpRef.current;
     const restore = () => helpTrigger.current?.focus();
@@ -1300,6 +1357,8 @@ export default function App() {
         rpm={status.data?.rpmMilli ?? 0}
         incoming={incoming}
         windowStart={settlements.data?.windowStart}
+        statusFeed={status}
+        resultsFeed={settlements}
       />
     );
   const lastSeen = status.data?.observedAt;
@@ -1479,8 +1538,8 @@ export default function App() {
         {storageFailed && (
           <Notice>
             Browser storage is unavailable or a saved file could not be read.
-            Teams may be kept only for this visit. Allow site storage before
-            relying on tomorrow’s result.
+            Existing unreadable data is preserved. Teams may be kept only for
+            this visit. Allow site storage before relying on tomorrow’s result.
           </Notice>
         )}
         <div className="announcement" role="status">

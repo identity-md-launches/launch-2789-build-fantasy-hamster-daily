@@ -47,15 +47,20 @@ export function parseSettlements(input: unknown, now: number): Settlements {
       start % WATCH_MS !== 0
     )
       throw new Error("Invalid bucket boundary");
-    // A snapshot's future zero stays unknown even if wall time passes its end later.
-    if (end > through) continue;
+    if (start > through) continue;
     const bucket: Bucket = {
       start,
       end,
       work: numeric(b.workAdded),
       rounds: numeric(b.activeRoundCount),
       blocks: numeric(b.completedBlockCount),
+      complete: end <= through,
+      observedAt: through,
     };
+    // Positive in-progress counts are lower bounds, never evidence of a rest.
+    // A snapshot's future zero stays unknown even if wall time passes its end.
+    if (!bucket.complete && !bucket.work && !bucket.rounds && !bucket.blocks)
+      continue;
     const key = dayKey(start),
       index = new Date(start).getUTCHours() / 6;
     days[key] ??= [null, null, null, null];
@@ -70,12 +75,10 @@ export interface WheelStatus {
   cumulativeWork: number;
   observedAt: number;
   staleAfterSeconds: number;
-  height: number;
 }
 export function parseStatus(input: unknown): WheelStatus {
   const data = object(input),
-    measurement = object(data.measurement),
-    anchor = object(object(data.builder).anchor);
+    measurement = object(data.measurement);
   if (
     !["ACTIVE", "IDLE", "COUNTER_FAULT"].includes(
       String(measurement.coreStatus),
@@ -91,7 +94,6 @@ export function parseStatus(input: unknown): WheelStatus {
     cumulativeWork: numeric(measurement.cumulativeWorkUnits),
     observedAt,
     staleAfterSeconds: numeric(measurement.staleAfterSeconds),
-    height: numeric(anchor.blockHeight),
   };
 }
 export function wheelState(
@@ -123,7 +125,14 @@ export function retryDelay(
 export function mergeDays(old: Days, fresh: Days): Days {
   const result: Days = { ...old };
   for (const [day, buckets] of Object.entries(fresh)) {
-    result[day] = buckets.map((bucket, i) => bucket ?? old[day]?.[i] ?? null);
+    result[day] = buckets.map((bucket, i) => {
+      const previous = old[day]?.[i];
+      if (!bucket) return previous ?? null;
+      if (!previous) return bucket;
+      if (previous.complete !== false && bucket.complete === false) return previous;
+      if (previous.complete === false && bucket.complete !== false) return bucket;
+      return (previous.observedAt ?? 0) > (bucket.observedAt ?? 0) ? previous : bucket;
+    });
   }
   return result;
 }

@@ -479,6 +479,7 @@ test("local storage survives exceptions, validates data, and preserves complete 
   assert.equal(
     writeState(
       {
+        getItem: () => null,
         setItem: () => {
           throw new Error("quota");
         },
@@ -502,6 +503,7 @@ test("local storage survives exceptions, validates data, and preserves complete 
   assert.equal(
     writeState(
       {
+        getItem: () => stored || null,
         setItem: (key, value) => {
           assert.equal(key, STORAGE_KEY);
           stored = value;
@@ -546,6 +548,7 @@ test("scored days survive archival pruning and API expiry; drafts saved outside 
   assert.equal(
     writeState(
       {
+        getItem: () => stored || null,
         setItem: (_key, value) => {
           stored = value;
         },

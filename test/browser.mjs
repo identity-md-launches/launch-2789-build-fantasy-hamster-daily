@@ -419,6 +419,165 @@ try {
       );
       await resultContext.context.close();
 
+      const progressPayload = structuredClone(payload);
+      Object.assign(progressPayload.buckets.find((b) => b.startAt === new Date(dayStart(today) + 3 * WATCH_MS).toISOString()), {
+        activeRoundCount: "40", workAdded: "9000", completedBlockCount: "1400",
+      });
+      const progressState = emptyState(); progressState.drafts[today] = makeDraft(today);
+      const progress = await contextFor(browser, { state: progressState, settlement: progressPayload });
+      await progress.page.goto(base + "#live");
+      await progress.page.getByText(/9,000 work · In progress/).waitFor();
+      assert.equal(await progress.page.locator(".watch.active-watch").count(), 3);
+      assert.equal(await progress.page.locator(".live-roster .outcome-hit").count(), 3);
+      assert.equal(await overflow(progress.page), false);
+      record(`${engine} in-progress live evidence`, "Positive Night watch counts hit Overtime, Clocked In and Triple Shift before midnight; unfinished watch stays labelled In progress");
+      await progress.context.close();
+
+      // Reopened findings: realistic rival names, stale tabs and independent feed failures.
+      const longName = "W".repeat(16);
+      const long = await contextFor(browser);
+      await long.page.goto(base + encodeRival(makeRoster(addDays(today, -12), longName)));
+      await long.page.getByRole("button", { name: "Add rival", exact: true }).click();
+      for (const width of [320, 360, 390, 760, 1440]) {
+        await long.page.setViewportSize({ width, height: 844 });
+        assert.equal(await overflow(long.page), false, `${engine} expired long rival at ${width}`);
+        assert.equal(await long.page.locator(".comparison-heading h3").innerText(), longName);
+        assert.equal(await long.page.locator(".comparison-outcome").allTextContents().then((x) => x.every((s) => s === "Expired")), true);
+      }
+      await long.page.setViewportSize({ width: 390, height: 844 });
+      await long.page.locator(".comparison-roster").scrollIntoViewIfNeeded();
+      await long.page.screenshot({ path: `${output}/${engine.toLowerCase()}-long-rival.png` });
+      await long.page.goto(base + encodeRival(makeRoster(tomorrow, longName)));
+      await long.page.getByRole("button", { name: "Add rival", exact: true }).click();
+      await long.page.setViewportSize({ width: 320, height: 844 });
+      assert.equal(await overflow(long.page), false, `${engine} priced long rival at 320`);
+      assert.match(await long.page.locator(".comparison-heading strong").innerText(), /\d+ pts/);
+      record(`${engine} long rival reflow`, "All 16 characters, expired outcomes and numeric scores fit; 320/360/390/760/1440px");
+      await long.context.close();
+
+      const multi = await contextFor(browser);
+      await loaded(multi.page);
+      const tabB = await multi.context.newPage();
+      await tabB.clock.install({ time: now + 1000 });
+      await loaded(tabB);
+      const overlayTab = await multi.context.newPage();
+      await overlayTab.clock.install({ time: now });
+      await overlayTab.goto(base + "?overlay=1");
+      await overlayTab.locator(".overlay-empty").waitFor();
+      const availableEvents = dailyCards(tomorrow).filter((e) => pricesFor(tomorrow, parseSettlements(payload, now).days)[e.id]?.points != null);
+      for (const event of availableEvents.slice(0, 5)) await tabB.getByRole("button", { name: `Pick ${event.name}`, exact: true }).click();
+      await tabB.getByRole("button", { name: `Make ${availableEvents[0].name} Captain`, exact: true }).click();
+      await tabB.getByRole("button", { name: "Save tomorrow’s team", exact: true }).click();
+      await tabB.getByRole("button", { name: "Draft saved", exact: true }).waitFor();
+      await multi.page.waitForFunction(() => document.querySelectorAll(".event-card.selected").length === 5);
+      await overlayTab.locator(".overlay-cards .event-card").first().waitFor();
+      assert.equal(await overlayTab.locator(".event-card").count(), 5);
+      for (const page of [multi.page, overlayTab]) {
+        await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+        await page.clock.runFor(100);
+      }
+      await multi.page.getByRole("button", { name: "Draft saved", exact: true }).waitFor();
+      assert.ok(await multi.page.evaluate(({ key, day }) => !!JSON.parse(localStorage.getItem(key)).drafts[day], { key: STORAGE_KEY, day: tomorrow }));
+      // Storage synchronization must not reset an unsaved local selection on a name change.
+      await multi.page.getByRole("button", { name: `Remove ${availableEvents[0].name}`, exact: true }).click();
+      await multi.page.getByRole("button", { name: `Pick ${availableEvents[5].name}`, exact: true }).click();
+      await multi.page.getByRole("textbox", { name: "Your display name (optional)" }).fill("Edited here");
+      assert.equal(await multi.page.getByRole("button", { name: `Remove ${availableEvents[5].name}`, exact: true }).count(), 1);
+      const archived = makeDraft(yesterday);
+      const archiveScore = { day: yesterday, roster: archived, score: rosterScore(archived, completeHistory, archived.prices), outcomes: rosterOutcomes(archived, completeHistory) };
+      await tabB.evaluate(({ key, archived, score, rival }) => {
+        const state = JSON.parse(localStorage.getItem(key));
+        state.drafts[archived.day] = archived;
+        state.scores[archived.day] = score;
+        state.rivals[rival.day] = [rival];
+        state.revealed = [archived.day];
+        localStorage.setItem(key, JSON.stringify(state));
+      }, { key: STORAGE_KEY, archived, score: archiveScore, rival: makeRoster(tomorrow, longName) });
+      await multi.page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+      await multi.page.clock.runFor(100);
+      const retained = await multi.page.evaluate((key) => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
+      assert.ok(retained.drafts[tomorrow]);
+      assert.deepEqual(retained.scores[yesterday], archiveScore);
+      assert.equal(retained.rivals[tomorrow][0].name, longName);
+      assert.ok(retained.revealed.includes(yesterday));
+      await tabB.close(); await overlayTab.close();
+      await multi.page.reload();
+      await multi.page.getByRole("button", { name: "Draft saved", exact: true }).waitFor();
+      assert.equal(await multi.page.locator(".event-card.selected").count(), 5);
+      record(`${engine} tabs and overlay share storage safely`, "B saves; A and OBS synchronize; visibility refetch and reload retain draft, archived score, rival and reveal; local edits survive name changes");
+      await multi.context.close();
+
+      for (const raw of ['{broken', '{"version":2,"scores":{"2026-10-20":{"score":500}},"drafts":{}}']) {
+        const unreadable = await contextFor(browser);
+        await unreadable.context.addInitScript(({ key, raw }) => {
+          if (!sessionStorage.getItem("corrupt-seeded")) {
+            localStorage.setItem(key, raw); sessionStorage.setItem("corrupt-seeded", "yes");
+          }
+        }, { key: STORAGE_KEY, raw });
+        await loaded(unreadable.page);
+        await unreadable.page.getByText(/Existing unreadable data is preserved/).waitFor();
+        await unreadable.page.getByRole("textbox", { name: "Your display name (optional)" }).fill("Visit only");
+        assert.equal(await unreadable.page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY), raw);
+        assert.deepEqual(unreadable.errors, []);
+        await unreadable.context.close();
+      }
+      record(`${engine} unreadable storage protection`, "Malformed JSON and a future schema remain byte-identical after loading and editing");
+
+      for (const failureMode of ["results", "status", "both", "first-results", "first-both", "counter-fault", "stale", "no-anchor"]) {
+        const feed = await contextFor(browser, { viewport: { width: 1920, height: 1080 } });
+        await feed.page.clock.pauseAt(now);
+        let fail = failureMode.startsWith("first-");
+        let resultCalls = 0;
+        await feed.context.unroute("https://api.squeekchain.com/v1/**");
+        await feed.context.route("https://api.squeekchain.com/v1/**", (route) => {
+          const results = route.request().url().includes("settlements");
+          if (results) resultCalls++;
+          const affected = failureMode.includes("both") || (results ? failureMode.includes("results") : failureMode === "status");
+          if (fail && affected) return route.fulfill({ status: 503, body: "unavailable" });
+          return route.fulfill({ json: results ? payload : {
+            ...wheel,
+            builder: failureMode === "no-anchor" ? { status: "unavailable", anchor: null } : wheel.builder,
+            measurement: {
+              ...wheel.measurement,
+              coreStatus: failureMode === "counter-fault" ? "COUNTER_FAULT" : "IDLE",
+              freshness: failureMode === "stale" ? "stale" : "online",
+              staleAfterSeconds: 3600,
+            },
+          } });
+        });
+        await feed.page.goto(base + "?overlay=1" + encodeRival(makeRoster(today)));
+        await feed.page.locator(".overlay-cards .outcome").first().waitFor();
+        if (!failureMode.startsWith("first-") && ["results", "status", "both"].includes(failureMode)) {
+          await feed.page.locator(".hamster-scene.sleeping").waitFor();
+          const outcomes = await feed.page.locator(".outcome").allTextContents();
+          fail = true;
+          await feed.page.clock.runFor(301000);
+          await feed.page.getByText(/Signal lost/).waitFor();
+          assert.deepEqual(await feed.page.locator(".outcome").allTextContents(), outcomes);
+          if (failureMode !== "status") assert.equal(resultCalls, 2);
+        }
+        const caption = await feed.page.locator(".overlay-hamster").innerText();
+        if (["results", "status", "both"].includes(failureMode)) {
+          assert.match(caption, /Signal lost/);
+          assert.match(caption, /last received 18:00:00 UTC/);
+        } else if (failureMode.startsWith("first-")) {
+          await feed.page.getByText(/Signal lost/).waitFor();
+          assert.match(await feed.page.locator(".overlay-hamster").innerText(), /never on this visit/);
+        } else {
+          await feed.page.locator(failureMode === "no-anchor" ? ".hamster-scene.sleeping" : ".hamster-scene.confused").waitFor();
+          assert.match(await feed.page.locator(".overlay-hamster").innerText(), failureMode === "counter-fault" ? /Counter fault/ : failureMode === "stale" ? /Wheel measurement stale/ : /Resting up/);
+          assert.doesNotMatch(caption, /Signal lost/);
+        }
+        if (failureMode.includes("results") || failureMode.includes("both")) assert.match(await feed.page.locator(".overlay-hamster").innerText(), /outcomes are last-known/);
+        assert.equal(await feed.page.locator("button, input, select, a, textarea").count(), 0);
+        const box = await feed.page.locator(".obs-overlay").boundingBox();
+        assert.ok(box.y >= 720 && box.y + box.height <= 1080, `Overlay ${failureMode} must stay in lower third: ${JSON.stringify(box)}`);
+        if (failureMode === "both") await feed.page.screenshot({ path: `${output}/${engine.toLowerCase()}-overlay-lost.png`, omitBackground: true });
+        assert.deepEqual(feed.errors, []);
+        await feed.context.close();
+      }
+      record(`${engine} overlay feed integrity`, "Independent failures, first-load failures, last-good times, retained outcomes, distinct counter fault/stale labels, null anchor; no controls and fits lower third");
+
       if (engine === "Chromium") {
         for (const width of [320, 390, 580, 760, 960, 1440]) {
           const check = await contextFor(browser, {

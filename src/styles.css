@@ -1108,9 +1108,19 @@
   .rival-invite p {
     margin-top: 8px;
   }
+  .rival-invite > div,
+  .rival-invite h3,
+  .comparison-heading h3,
+  .ranking-list li > span:nth-child(2) {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .rival-invite > div {
+    max-width: 100%;
+  }
   .head-to-head {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 32px;
   }
   .comparison-roster {
@@ -1118,6 +1128,7 @@
   }
   .comparison-heading {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
     gap: 12px;
@@ -1125,6 +1136,7 @@
   }
   .comparison-heading > strong {
     font-size: var(--text-card);
+    white-space: nowrap;
   }
   .comparison-roster ol {
     list-style: none;
@@ -1143,6 +1155,8 @@
   }
   .comparison-roster li > span:first-of-type {
     flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
     font-weight: 700;
   }
   .comparison-roster small {
@@ -1276,6 +1290,9 @@
   }
   .overlay-hamster .hamster-scene {
     height: 160px;
+  }
+  .overlay-hamster.signal-lost .hamster-scene {
+    height: 140px;
   }
   .overlay-hamster strong,
   .overlay-hamster span {
@@ -1812,7 +1829,7 @@
       gap: 16px;
     }
     .head-to-head {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
     .comparison-roster .card-art {
       width: 48px;

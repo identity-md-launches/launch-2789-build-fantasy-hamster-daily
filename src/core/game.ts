@@ -7,6 +7,9 @@ export interface Bucket {
   work: number;
   rounds: number;
   blocks: number;
+  /** Older saved buckets have no flag and are complete. Partial evidence never ages into final evidence. */
+  complete?: boolean;
+  observedAt?: number;
 }
 export type Days = Record<string, (Bucket | null)[]>;
 export type Outcome = "hit" | "miss" | "pending" | "unavailable";
@@ -59,18 +62,20 @@ export const pricePoints = (hitRate: number): number =>
 export const bucketsFor = (days: Days, day: string): (Bucket | null)[] =>
   days[day] ?? [null, null, null, null];
 export const isComplete = (days: Days, day: string): boolean =>
-  bucketsFor(days, day).filter(Boolean).length === 4;
+  bucketsFor(days, day).every((b) => b !== null && b.complete !== false);
 export const total = (
   buckets: (Bucket | null)[],
   key: "work" | "rounds" | "blocks" = "work",
 ): number => buckets.reduce((sum, b) => sum + (b?.[key] ?? 0), 0);
 
-/** Only confirmed-complete buckets enter Days. Unknown watches are never zeroes. */
+/** Partial counts prove monotonic hits, but only a finished watch can prove inactivity. */
 export function evaluate(event: Event, day: string, days: Days): Outcome {
   const buckets = bucketsFor(days, day);
-  const complete = buckets.every(Boolean);
+  const complete = isComplete(days, day);
   const work = total(buckets);
-  const active = buckets.map((b) => (b === null ? null : b.rounds > 0));
+  const active = buckets.map((b) =>
+    b?.rounds ? true : b && b.complete !== false ? false : null,
+  );
   const count = active.filter(Boolean).length;
   const possible = count + active.filter((b) => b === null).length;
   const finish = (hit: boolean): Outcome =>
@@ -100,7 +105,7 @@ export function evaluate(event: Event, day: string, days: Days): Outcome {
     case "triple":
       return count >= 3 ? "hit" : possible < 3 ? "miss" : finish(false);
     case "all":
-      return active.includes(false) ? "miss" : finish(count === 4);
+      return active.includes(false) ? "miss" : count === 4 ? "hit" : "pending";
     case "one":
       return count > 1 || possible < 1 ? "miss" : finish(count === 1);
     case "monster":
@@ -153,6 +158,14 @@ export function pricesFor(gameDay: string, days: Days): Prices {
       for (let i = 1; i <= 7; i++) {
         const day = addDays(draftDay, -i);
         if (!isComplete(days, day)) continue;
+        // Require the same evidence for a sampled hit and miss. Otherwise a
+        // partial record history admits only disproved records and biases odds.
+        const priorCount =
+          event.kind === "record" ? 6 : event.kind === "yesterday" ? 1 : 0;
+        if (
+          Array.from({ length: priorCount }, (_, j) => addDays(day, -j - 1))
+            .some((prior) => !isComplete(days, prior))
+        ) continue;
         const outcome = evaluate(event, day, days);
         if (outcome !== "hit" && outcome !== "miss") continue;
         sample++;
