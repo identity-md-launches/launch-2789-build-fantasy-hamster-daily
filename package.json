@@ -1,0 +1,28 @@
+{
+  "name": "fantasy-hamster",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/core/*.test.ts",
+    "preview": "vite preview --host 0.0.0.0",
+    "validate": "tsx test/browser.mjs"
+  },
+  "dependencies": {
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.6",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "vite": "7.1.12",
+    "playwright": "1.56.1",
+    "@axe-core/playwright": "4.10.2"
+  }
+}

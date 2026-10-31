@@ -1,0 +1,6 @@
+# Path budget: artifacts/budget.md. The required dist/ export is intentionally included.
+**/node_modules/
+**/.vite/
+**/.cache/
+**/*.tsbuildinfo
+test/scratch/
